@@ -18,7 +18,9 @@ $(function() {
             const $linkWrapper = $('<span class="link-wrapper"></span>');
             const $link = $li.children('a').addClass('ibm-type-b-tight');
             const $div = $('<div class="item"></div>');
+            console.log($link[0].text);
             const text = $link[0].text.split('.');
+            console.log(text);
             if(text.length > 2) {
                 $link[0].text = text[text.length - 1];
             }
@@ -169,7 +171,7 @@ $(function() {
               <rect x="26" y="24" width="2" height="2"/>
               <rect class="cls-1" width="32" height="32"/>
           </svg>`));
-          $('.mdl-layout-title .title').append($('<h3 class="title-header">Qiskit</h3>'))
+          $('.mdl-layout-title .title').append($('<h3 class="title-header">Terra</h3>'))
 
     }
       function replaceLinksComposer() {
