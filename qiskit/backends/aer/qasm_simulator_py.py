@@ -78,11 +78,12 @@ from collections import Counter
 
 import numpy as np
 
+from qiskit.backends.models import BackendConfiguration, BackendProperties
 from qiskit.result._utils import copy_qasm_from_qobj_into_result, result_from_old_style_dict
 from qiskit.backends import BaseBackend
 from qiskit.backends.aer.aerjob import AerJob
 from ._simulatorerror import SimulatorError
-from ._simulatortools import single_gate_matrix
+from ._simulatortools import index2, single_gate_matrix
 logger = logging.getLogger(__name__)
 
 
@@ -90,17 +91,22 @@ class QasmSimulatorPy(BaseBackend):
     """Python implementation of a qasm simulator."""
 
     DEFAULT_CONFIGURATION = {
-        'name': 'qasm_simulator_py',
+        'backend_name': 'qasm_simulator_py',
+        'backend_version': '2.0.0',
+        'n_qubits': -1,
         'url': 'https://github.com/QISKit/qiskit-terra',
         'simulator': True,
         'local': True,
-        'description': 'A python simulator for qasm files',
-        'coupling_map': 'all-to-all',
-        'basis_gates': 'u1,u2,u3,cx,id,snapshot'
+        'conditional': True,
+        'open_pulse': False,
+        'description': 'A python simulator for qasm experiments',
+        'basis_gates': ['u1', 'u2', 'u3', 'cx', 'id', 'snapshot'],
+        'gates': [{'name': 'TODO', 'parameters': [], 'qasm_def': 'TODO'}]
     }
 
     def __init__(self, configuration=None, provider=None):
-        super().__init__(configuration=configuration or self.DEFAULT_CONFIGURATION.copy(),
+        super().__init__(configuration=(configuration or
+                                        BackendConfiguration.from_dict(self.DEFAULT_CONFIGURATION)),
                          provider=provider)
 
         self._local_random = random.Random()
@@ -114,45 +120,22 @@ class QasmSimulatorPy(BaseBackend):
         self._shots = 0
         self._qobj_config = None
 
-    @staticmethod
-    def _index1(b, i, k):
-        """Magic index1 function.
+    def properties(self):
+        """Return backend properties"""
+        properties = {
+            'backend_name': self.name(),
+            'backend_version': self.configuration().backend_version,
+            'last_update_date': '2000-01-01 00:00:00Z',
+            'qubits': [[{'name': 'TODO', 'date': '2000-01-01 00:00:00Z',
+                         'unit': 'TODO', 'value': 0}]],
+            'gates': [{'qubits': [0], 'gate': 'TODO',
+                       'parameters':
+                           [{'name': 'TODO', 'date': '2000-01-01 00:00:00Z',
+                             'unit': 'TODO', 'value': 0}]}],
+            'general': []
+        }
 
-        Takes a bitstring k and inserts bit b as the ith bit,
-        shifting bits >= i over to make room.
-        """
-        retval = k
-        lowbits = k & ((1 << i) - 1)  # get the low i bits
-
-        retval >>= i
-        retval <<= 1
-
-        retval |= b
-
-        retval <<= i
-        retval |= lowbits
-
-        return retval
-
-    @staticmethod
-    def _index2(b1, i1, b2, i2, k):
-        """Magic index1 function.
-
-        Takes a bitstring k and inserts bits b1 as the i1th bit
-        and b2 as the i2th bit
-        """
-        if i1 == i2:
-            raise SimulatorError("can't insert two bits to same place")
-
-        if i1 > i2:
-            # insert as (i1-1)th bit, will be shifted left 1 by next line
-            retval = QasmSimulatorPy._index1(b1, i1-1, k)
-            retval = QasmSimulatorPy._index1(b2, i2, retval)
-        else:  # i2>i1
-            # insert as (i2-1)th bit, will be shifted left 1 by next line
-            retval = QasmSimulatorPy._index1(b2, i2-1, k)
-            retval = QasmSimulatorPy._index1(b1, i1, retval)
-        return retval
+        return BackendProperties.from_dict(properties)
 
     def _add_qasm_single(self, gate, qubit):
         """Apply an arbitrary 1-qubit operator to a qubit.
@@ -179,9 +162,9 @@ class QasmSimulatorPy(BaseBackend):
         psi = self._statevector
         for k in range(0, 1 << (self._number_of_qubits - 2)):
             # first bit is control, second is target
-            ind1 = self._index2(1, q0, 0, q1, k)
+            ind1 = index2(1, q0, 0, q1, k)
             # swap target if control is 1
-            ind3 = self._index2(1, q0, 1, q1, k)
+            ind3 = index2(1, q0, 1, q1, k)
             cache0 = psi[ind1]
             cache1 = psi[ind3]
             psi[ind3] = cache0
@@ -283,7 +266,7 @@ class QasmSimulatorPy(BaseBackend):
         for circuit in qobj.experiments:
             result_list.append(self.run_circuit(circuit))
         end = time.time()
-        result = {'backend': self._configuration['name'],
+        result = {'backend': self.name(),
                   'id': qobj.qobj_id,
                   'job_id': job_id,
                   'result': result_list,
@@ -293,8 +276,7 @@ class QasmSimulatorPy(BaseBackend):
 
         copy_qasm_from_qobj_into_result(qobj, result)
 
-        return result_from_old_style_dict(
-            result, [circuit.header.name for circuit in qobj.experiments])
+        return result_from_old_style_dict(result)
 
     def run_circuit(self, circuit):
         """Run a circuit and return a single Result.
@@ -382,7 +364,7 @@ class QasmSimulatorPy(BaseBackend):
                     params = operation.params
                     self._add_qasm_snapshot(params[0])
                 else:
-                    backend = self._configuration['name']
+                    backend = self.name()
                     err_msg = '{0} encountered unrecognized operation "{1}"'
                     raise SimulatorError(err_msg.format(backend,
                                                         operation.name))
